@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name=theme-color content="#000">
+<title>Camera Studio - Native Like (Full HTML)</title>
+<style>
+*{box-sizing:border-box;margin:0} body{background:#000;color:#fff;font-family:system-ui;overflow:hidden}
+#https{padding:8px;text-align:center;font-size:11px;position:fixed;top:0;left:0;right:0;z-index:100}
+#https.ok{background:#00c853} #https.bad{background:#d50000}
+#view{width:100vw;height:100vh;position:relative;background:#000}
+video{width:100%;height:100%;object-fit:cover;background:#000}
+#ui{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none}
+#topBar{display:flex;justify-content:space-between;padding:14px;padding-top:28px;pointer-events:auto;background:linear-gradient(#000,transparent)}
+#bottomBar{pointer-events:auto;background:linear-gradient(transparent,#000);padding:12px}
+#modes{display:flex;gap:10px;justify-content:center;margin-bottom:10px;overflow:auto}
+#modes button{border:none;background:transparent;color:#aaa;padding:6px 12px;font-weight:700}
+#modes button.on{color:#fff;border-bottom:2px solid #fff}
+#shutterRow{display:flex;align-items:center;justify-content:space-around}
+#shutter{width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:transparent;pointer-events:auto}
+#shutter.rec{background:#f00;box-shadow:0 0 0 6px rgba(255,0,0,.3)}
+#gallery{width:48px;height:48px;border-radius:12px;background:#222;border:2px solid #333;object-fit:cover;pointer-events:auto}
+#tools{display:none;position:absolute;inset:0;background:#0a0a0a;z-index:50;padding:10px;overflow:auto}
+#tools.show{display:block}
+.card{background:#171717;border:1px solid #222;border-radius:16px;padding:12px;margin:8px 0}
+button.action{width:100%;padding:12px;border-radius:12px;border:1px solid #333;background:#1f1f1f;color:#fff;font-weight:700;margin:4px 0}
+input[type=range]{width:100%}
+canvas{width:100%;border-radius:16px;background:#000}
+</style>
+</head><body>
+<div id=https>CEK HTTPS...</div>
+
+<div id=view>
+<video id=cam autoplay muted playsinline></video>
+<canvas id=canvas style="display:none"></canvas>
+
+<div id=ui>
+<div id=topBar>
+<button onclick="flip()" class="action" style="width:auto;padding:8px 12px">🔄 Flip</button>
+<div style="display:flex;gap:6px"><button onclick="openTools('stream')" class="action" style="width:auto">📡 LIVE</button><button onclick="openTools('edit')" class="action" style="width:auto">🎨 EDIT</button></div>
+</div>
+
+<div id=bottomBar>
+<div id=modes>
+<button onclick="setMode('foto')" id=m-foto class="on">FOTO</button>
+<button onclick="setMode('video')" id=m-video>VIDEO</button>
+<button onclick="setMode('bg')" id=m-bg>REKAM BG</button>
+</div>
+<div id=shutterRow>
+<img id=gallery src="" style="background:#222">
+<button id=shutter onclick="doShutter()"></button>
+<button onclick="openTools('gallery')" class="action" style="width:48px;height:48px;border-radius:12px">🖼️</button>
+</div>
+<p id=log style="text-align:center;font-size:11px;color:#888;margin-top:6px">Full HTML • HTTPS Only • Real Camera</p>
+</div>
+</div>
+
+<!-- TOOLS OVERLAY (EDIT FOTO / VIDEO / STREAM / GALLERY) -->
+<div id=tools>
+<div style="display:flex;justify-content:space-between"><h3 id=tTitle>Tools</h3><button onclick="closeTools()" class="action" style="width:auto">✕ Tutup</button></div>
+<div id=tool-foto style="display:none">
+<canvas id=cFoto></canvas>
+Filter <select id=fFoto onchange="applyFoto()" style="width:100%;padding:10px;background:#000;color:#fff;border-radius:10px">
+<option value="none">Normal</option><option value="grayscale(100%)">BW Beneran</option><option value="sepia(100%)">Sepia</option><option value="invert(100%)">Negative</option><option value="blur(2px)">Blur</option>
+</select>
+Brightness <input type=range id=bBri min=0 max=200 value=100 oninput="applyFoto()">
+Saturasi <input type=range id=bSat min=0 max=300 value=100 oninput="applyFoto()">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+<button onclick="cropFoto()" class="action">✂️ Crop</button><button onclick="mirrorFoto()" class="action">🪞 Mirror</button>
+<button onclick="textFoto()" class="action">📝 Teks</button><button onclick="resetFoto()" class="action">🔄 Reset</button>
+</div>
+<button onclick="saveFoto()" class="action" style="background:#0f8;color:#000">💾 SAVE FOTO (Beneran PNG)</button>
+</div>
+
+<div id=tool-video style="display:none">
+<video id=vEdit controls style="width:100%"></video>
+Filter <select id=fVideo onchange="vEdit.style.filter=this.value" style="width:100%;padding:10px;background:#000;color:#fff;border-radius:10px"><option value="none">Normal</option><option value="grayscale(100%)">BW</option><option value="sepia(100%)">Sepia</option></select>
+Trim <input type=range id=vTrimS min=0 max=100 value=0> - <input type=range id=vTrimE min=0 max=100 value=100>
+<button onclick="exportVideo()" class="action" style="background:#0f8;color:#000">💾 EXPORT VIDEO EDIT BENERAN (.webm)</button>
+</div>
+
+<div id=tool-stream style="display:none">
+<video id=vStream autoplay muted playsinline style="width:100%;max-height:40vh"></video>
+<div class=card>
+<b>STREAMING BENERAN:</b><br>
+1. Ini preview layar lu (getDisplayMedia) - REAL<br>
+2. Buat live ke YouTube: copy RTMP key dari YouTube Studio, paste di OBS > Custom RTMP: rtmp://a.rtmp.youtube.com/live2<br>
+3. Di OBS, pilih Window Capture > pilih tab ini<br><br>
+<button onclick="startStream()" class="action">Mulai Stream Layar Beneran</button>
+<button onclick="stopStream()" class="action">Stop</button>
+</div>
+</div>
+
+<div id=tool-gallery style="display:none"><div id=gList></div></div>
+</div>
+</div>
+
+<script>
+// HTTPS CHECK - INI WAJIB, KALO GAK HTTPS KAMERA DI BLOCK
+let httpsEl=document.getElementById('https');
+if(location.protocol==='https:' || location.hostname==='localhost'){
+  httpsEl.className='ok'; httpsEl.innerText='✅ HTTPS AKTIF - Semua fitur REAL jalan';
+}else{
+  httpsEl.className='bad'; httpsEl.innerText='❌ HARUS DI HTTPS! Upload file ini ke Netlify.app / Vercel.app / Github.io biar jadi https://';
+}
+
+let cam=document.getElementById('cam'), canvas=document.getElementById('canvas');
+let gallery=document.getElementById('gallery'), mode='foto', stream=null, facing='environment';
+let recorder=null, chunks=[], lastBlob=null, gList=[];
+
+async function startCamera(){
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1920},height:{ideal:1080}},audio:true});
+    cam.srcObject=stream;
+  }catch(e){ alert('Gagal kamera, harus HTTPS: '+e.message); }
+}
+function flip(){ facing=facing==='environment'?'user':'environment'; startCamera(); }
+function setMode(m){
+  mode=m; document.querySelectorAll('#modes button').forEach(b=>b.classList.remove('on')); document.getElementById('m-'+m).classList.add('on');
+  document.getElementById('shutter').classList.toggle('rec', m==='video' && recorder && recorder.state==='recording');
+  document.getElementById('log').innerText = m==='foto'?'Tap bulat putih = Foto beneran': m==='video'?'Tap merah = Rekam video beneran':'Tap = Rekam layar background beneran';
+}
+async function doShutter(){
+  if(mode==='foto') takeFotoReal();
+  else if(mode==='video') toggleVideoReal();
+  else if(mode==='bg') toggleBgReal();
+}
+
+function takeFotoReal(){
+  let c=document.createElement('canvas'); c.width=cam.videoWidth; c.height=cam.videoHeight;
+  c.getContext('2d').drawImage(cam,0,0);
+  let data=c.toDataURL('image/png');
+  gallery.src=data; addGallery(data,'foto'); openFotoEditor(c);
+}
+
+function openFotoEditor(c){
+  let cFoto=document.getElementById('cFoto'); cFoto.width=c.width; cFoto.height=c.height;
+  cFoto.getContext('2d').drawImage(c,0,0); openTools('foto');
+}
+
+let cFoto=document.getElementById('cFoto');
+function applyFoto(){
+  let f=document.getElementById('fFoto').value, b=document.getElementById('bBri').value, s=document.getElementById('bSat').value;
+  cFoto.style.filter=(f==='none'?'':f+' ')+`brightness(${b}%) saturate(${s}%)`;
+}
+function cropFoto(){ let w=cFoto.width,h=cFoto.height,tmp=document.createElement('canvas'); tmp.width=w*0.8; tmp.height=h*0.8; tmp.getContext('2d').drawImage(cFoto,w*0.1,h*0.1,w*0.8,h*0.8,0,0,w*0.8,h*0.8); cFoto.width=tmp.width; cFoto.height=tmp.height; cFoto.getContext('2d').drawImage(tmp,0,0); }
+function mirrorFoto(){ let ctx=cFoto.getContext('2d'); let tmp=document.createElement('canvas'); tmp.width=cFoto.width; tmp.height=cFoto.height; tmp.getContext('2d').drawImage(cFoto,0,0); ctx.save(); ctx.scale(-1,1); ctx.drawImage(tmp,-cFoto.width,0); ctx.restore(); }
+function textFoto(){ let t=prompt('Teks:','Full HTML Native'); if(!t) return; let ctx=cFoto.getContext('2d'); ctx.font='bold '+(cFoto.width/16)+'px sans-serif'; ctx.fillStyle='#fff'; ctx.strokeStyle='#000'; ctx.lineWidth=4; ctx.strokeText(t,20,cFoto.height-30); ctx.fillText(t,20,cFoto.height-30); }
+function resetFoto(){ applyFoto(); }
+function saveFoto(){ let a=document.createElement('a'); a.href=cFoto.toDataURL('image/png'); a.download='foto-real-'+Date.now()+'.png'; a.click(); addGallery(a.href,'foto'); }
+
+// VIDEO REAL
+function toggleVideoReal(){
+  if(!recorder || recorder.state==='inactive'){
+    chunks=[]; recorder=new MediaRecorder(stream,{mimeType:'video/webm;codecs=vp9,opus'});
+    recorder.ondataavailable=e=>{ if(e.data.size>0) chunks.push(e.data); };
+    recorder.onstop=()=>{ let blob=new Blob(chunks,{type:'video/webm'}); lastBlob=blob; let url=URL.createObjectURL(blob); document.getElementById('vEdit').src=url; gallery.src=url; addGallery(url,'video',blob); openTools('video'); document.getElementById('shutter').classList.remove('rec'); };
+    recorder.start(); document.getElementById('shutter').classList.add('rec'); document.getElementById('log').innerText='🔴 MEREKAM VIDEO BENERAN... tap lagi untuk stop';
+  }else{ recorder.stop(); }
+}
+
+// REKAM BG (LAYAR) REAL
+let bgStream=null;
+async function toggleBgReal(){
+  try{
+    if(!bgStream ||!recorder || recorder.state==='inactive'){
+      bgStream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});
+      let mic=await navigator.mediaDevices.getUserMedia({audio:true}).catch(()=>null);
+      if(mic) mic.getAudioTracks().forEach(t=>bgStream.addTrack(t));
+      cam.srcObject=bgStream; chunks=[]; recorder=new MediaRecorder(bgStream,{mimeType:'video/webm'});
+      recorder.ondataavailable=e=>chunks.push(e.data);
+      recorder.onstop=()=>{ let blob=new Blob(chunks,{type:'video/webm'}); lastBlob=blob; let url=URL.createObjectURL(blob); document.getElementById('vEdit').src=url; addGallery(url,'video',blob); openTools('video'); document.getElementById('shutter').classList.remove('rec'); startCamera(); };
+      recorder.start(); document.getElementById('shutter').classList.add('rec'); document.getElementById('log').innerText='🔴 MEREKAM LAYAR BG BENERAN...';
+    }else{ recorder.stop(); bgStream.getTracks().forEach(t=>t.stop()); }
+  }catch(e){ alert('Gagal rekam layar, harus HTTPS: '+e.message); }
+}
+
+// STREAM REAL
+let liveStream=null;
+async function startStream(){ try{ liveStream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true}); document.getElementById('vStream').srcObject=liveStream; }catch(e){ alert(e.message); } }
+function stopStream(){ if(liveStream) liveStream.getTracks().forEach(t=>t.stop()); }
+
+// EXPORT VIDEO EDIT BENERAN (re-record canvas)
+async function exportVideo(){
+  let v=document.getElementById('vEdit'); if(!v.src) return;
+  let c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight; let ctx=c.getContext('2d');
+  let s=c.captureStream(30); let r=new MediaRecorder(s,{mimeType:'video/webm'}); let ch=[];
+  r.ondataavailable=e=>ch.push(e.data); r.onstop=()=>{ let blob=new Blob(ch,{type:'video/webm'}); let a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='video-edit-real-'+Date.now()+'.webm'; a.click(); };
+  r.start(); v.currentTime=0; v.play();
+  let draw=()=>{ if(v.ended){ r.stop(); return; } ctx.filter=document.getElementById('fVideo').value; ctx.drawImage(v,0,0,c.width,c.height); requestAnimationFrame(draw); }; draw();
+}
+
+function addGallery(url,type,blob){
+  gList.unshift({url,type,blob}); renderGallery(); gallery.src=url;
+}
+function renderGallery(){
+  let el=document.getElementById('gList'); el.innerHTML='';
+  gList.forEach((g,i)=>{
+    let d=document.createElement('div'); d.className='card';
+    d.innerHTML=(g.type==='foto'?`<img src="${g.url}" style="width:100%;border-radius:12px">`:`<video src="${g.url}" controls style="width:100%"></video>`)+`<button onclick="downloadG(${i})" class="action">Download</button>`;
+    el.appendChild(d);
+  });
+}
+function downloadG(i){ let g=gList[i]; let a=document.createElement('a'); a.href=g.url; a.download=(g.type==='foto'?'foto-':'video-')+Date.now()+(g.type==='foto'?'.png':'.webm'); a.click(); }
+
+function openTools(n){ document.getElementById('tools').classList.add('show'); document.querySelectorAll('#tools > div[id^=tool-]').forEach(d=>d.style.display='none'); document.getElementById('tool-'+n).style.display='block'; document.getElementById('tTitle').innerText=n.toUpperCase(); }
+function closeTools(){ document.getElementById('tools').classList.remove('show'); }
+
+startCamera();
+</script>
+</body></html>
